@@ -5,8 +5,8 @@
 // @description  Cronómetros, respuestas, llamadas y sincronización. Edición sin asistencia de escritura.
 // @author       Aldair Valdivia
 // @match        *://crm.co-prime.diftech.org/*
-// @updateURL    https://gist.githubusercontent.com/dappermoon26726/51d6739ae25b6ad146f3059e8211f235/raw/crm-colombia.user.js
-// @downloadURL  https://gist.githubusercontent.com/dappermoon26726/51d6739ae25b6ad146f3059e8211f235/raw/crm-colombia.user.js
+// @updateURL    https://github.com/dappermoon26726/CRM-Colombia/raw/refs/heads/main/colombia.user.js
+// @downloadURL  https://github.com/dappermoon26726/CRM-Colombia/raw/refs/heads/main/colombia.user.js
 // @require      https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js
 // @require      https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js
 // @require      https://accounts.google.com/gsi/client
