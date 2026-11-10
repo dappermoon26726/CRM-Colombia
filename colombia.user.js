@@ -86,8 +86,8 @@
     // el CRM, los cronómetros ni el trabajo del agente.
     // =========================================================================
     const ACTUALIZADOR_SUITE = {
-        URL_METADATA: 'https://gist.githubusercontent.com/dappermoon26726/51d6739ae25b6ad146f3059e8211f235/raw/crm-colombia.user.js',
-        URL_DESCARGA: 'https://gist.githubusercontent.com/dappermoon26726/51d6739ae25b6ad146f3059e8211f235/raw/crm-colombia.user.js',
+        URL_METADATA: 'https://raw.githubusercontent.com/dappermoon26726/CRM-Colombia/main/colombia.user.js',
+        URL_DESCARGA: 'https://raw.githubusercontent.com/dappermoon26726/CRM-Colombia/main/colombia.user.js',
         INTERVALO_MS: 15 * 60 * 1000,
         comprobando: false,
         disponible: false,
