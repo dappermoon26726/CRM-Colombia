@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Sistema Dual Independiente: Cronómetros + Respuestas Premium + Módulo Llamadas (Optimizado + Marco Seguro)
 // @namespace    http://platatimer
-// @version      84.11.3
+// @version      84.11.4
 // @description  Cronómetros, respuestas, llamadas y sincronización. Edición sin asistencia de escritura.
 // @author       Aldair Valdivia
 // @match        *://crm.co-prime.diftech.org/*
@@ -20,7 +20,7 @@
 
     const ES_CRM = location.hostname === 'crm.co-prime.diftech.org';
     const MODO_VENTANA_AUTH = ES_CRM && new URLSearchParams(location.search).get('sistema_dual_auth') === '1';
-    const SUITE_VERSION = '84.11.3';
+    const SUITE_VERSION = '84.11.4';
     const SUITE_NOMBRE = 'Sistema Dual';
     const SUITE_AUTOR = 'Aldair Valdivia';
 
@@ -941,6 +941,34 @@
     // =========================================================================
     // 1. CONFIGURACIÓN GENERAL Y PLANTILLAS
     // =========================================================================
+    const INTERACCION_NORMAL = {
+        valores: { avisoMin: 5, sinRespuestaMin: 12 },
+        validar(avisoMin, sinRespuestaMin) {
+            return Number.isInteger(avisoMin) && Number.isInteger(sinRespuestaMin)
+                && avisoMin >= 1 && sinRespuestaMin > avisoMin && sinRespuestaMin <= 240;
+        },
+        cargar() {
+            this.valores = { avisoMin: 5, sinRespuestaMin: 12 };
+            try {
+                const datos = JSON.parse(localStorage.getItem(CLAVE_USUARIO('interaccion_normal_v1')) || 'null');
+                if (datos && this.validar(datos.avisoMin, datos.sinRespuestaMin)) this.valores = datos;
+            } catch (_) {}
+        },
+        guardar(avisoMin, sinRespuestaMin) {
+            if (!this.validar(avisoMin, sinRespuestaMin)) throw new Error('Usa minutos enteros: el primer aviso debe ser al menos 1 y Sin respuesta debe ser mayor, hasta 240 minutos.');
+            const datos = { avisoMin, sinRespuestaMin };
+            localStorage.setItem(CLAVE_USUARIO('interaccion_normal_v1'), JSON.stringify(datos));
+            this.valores = datos;
+        },
+        visualizar(chat) {
+            if (chat.tipo === 'bienvenida') return { etiqueta:'Primer mensaje', color:'#38bdf8', clase:'bienvenida', nivel:0 };
+            if (chat.tipo === 'cliente_respondio') return { etiqueta:'En espera de respuesta', color:'#d8b4fe', clase:'respuesta', nivel:0 };
+            if (chat.tiempo >= this.valores.sinRespuestaMin * 60) return { etiqueta:'Sin respuesta', color:'#ef4444', clase:'urgente', nivel:2 };
+            if (chat.tiempo >= this.valores.avisoMin * 60) return { etiqueta:'Primer aviso', color:'#f59e0b', clase:'aviso', nivel:1 };
+            return { etiqueta:'Seguimiento', color:'#34d399', clase:'', nivel:0 };
+        }
+    };
+
     const CONFIG = {
         HORA_ACTUALIZACION: { hora: 7, minuto: 10 },
         HORA_RESPALDO_DIARIO: { hora: 7, minuto: 30 },
@@ -1187,6 +1215,7 @@
 
         async cargarConfiguraciones() {
             await AUTH_MANAGER.inicializarObligatorio();
+            INTERACCION_NORMAL.cargar();
             HISTORIAL_LOCAL.configurar(AUTH_MANAGER.usuario?.email || '');
             await HISTORIAL_LOCAL.limpiarVencidos();
             const cargar = (clave, fallback) => {
@@ -1294,6 +1323,7 @@
             this.guardarHistorialEmergencia();
             localStorage.setItem(CLAVE_USUARIO('migracion_google_completada'), '1');
 
+            MOTOR_CRONOMETROS_V2.adoptarEstadoActual();
             this.ultimoTickCronometros = Date.now();
             this.ultimoGuardadoCronometros = Date.now();
 
@@ -2723,7 +2753,7 @@
                 }
                 [data-testid*="task-tab-"].suite-chat-con-cronometro {
                     position: relative !important;
-                    padding-right: 70px !important;
+                    padding-right: 91px !important;
                     box-sizing: border-box !important;
                 }
                 .suite-cronometro-chat-integrado {
@@ -2732,8 +2762,8 @@
                     top: 50% !important;
                     transform: translateY(-50%) !important;
                     min-width: 45px !important;
-                    height: 24px !important;
-                    padding: 0 7px !important;
+                    height: 36px !important;
+                    padding: 4px 6px !important;
                     display: inline-flex !important;
                     align-items: center !important;
                     justify-content: center !important;
@@ -2742,10 +2772,11 @@
                     border: 1px solid rgba(16, 185, 129, 0.20) !important;
                     background: rgba(15, 23, 42, 0.07) !important;
                     color: #059669 !important;
-                    font: 800 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+                    font: 800 10px/1.35 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
                     letter-spacing: -0.03em !important;
                     pointer-events: none !important;
-                    white-space: nowrap !important;
+                    white-space: pre !important;
+                    text-align: center !important;
                     z-index: 2 !important;
                     transition: color .2s ease, background-color .2s ease, border-color .2s ease !important;
                 }
@@ -3413,6 +3444,52 @@
             this.aplicarTemaEnElemento(k);
         },
 
+        abrirInteraccionNormal() {
+            document.getElementById('suite-interaccion-normal')?.remove();
+            const valores = INTERACCION_NORMAL.valores;
+            const modal = document.createElement('div');
+            modal.id = 'suite-interaccion-normal';
+            modal.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:rgba(2,6,23,.65);display:grid;place-items:center;padding:18px;box-sizing:border-box;font-family:Inter,-apple-system,sans-serif;";
+            modal.innerHTML = `<form style="width:min(420px,100%);max-height:90vh;overflow:auto;padding:22px;box-sizing:border-box;border-radius:18px;background:var(--sd-panel-bg,#0f172a);color:var(--sd-texto,#f8fafc);border:1px solid var(--sd-borde,#334155);box-shadow:0 24px 70px #0008;">
+                <div style="font-size:18px;font-weight:850;margin-bottom:8px;">Interacción normal</div>
+                <p style="font-size:12px;line-height:1.6;color:var(--sd-tenue,#94a3b8);margin:0 0 18px;">El contador sube desde cero. El AHT acumula la duración total del chat. Los avisos se cuentan desde tu última respuesta.</p>
+                <label style="display:block;font-size:12px;margin-bottom:14px;">Primer aviso (minutos)
+                    <input name="aviso" class="suite-input-plata" type="number" min="1" max="239" step="1" required value="${valores.avisoMin}" style="display:block;width:100%;box-sizing:border-box;margin-top:6px;padding:10px;"></label>
+                <label style="display:block;font-size:12px;margin-bottom:14px;">Sin respuesta · rojo (minutos)
+                    <input name="sinRespuesta" class="suite-input-plata" type="number" min="2" max="240" step="1" required value="${valores.sinRespuestaMin}" style="display:block;width:100%;box-sizing:border-box;margin-top:6px;padding:10px;"></label>
+                <p style="font-size:12px;line-height:1.6;">Cuando el cliente responde, el contador vuelve a 0 y muestra <b>En espera de respuesta</b>, sin avisos de seguimiento.</p>
+                <p style="font-size:11px;color:var(--sd-tenue,#94a3b8);">Los cambios se aplican también a los chats abiertos sin reiniciar sus tiempos y se guardan para tu cuenta en este navegador.</p>
+                <div role="alert" id="suite-interaccion-error" style="color:#fca5a5;font-size:12px;margin:12px 0;"></div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button type="submit" class="suite-boton-plata">Guardar tiempos</button>
+                    <button type="button" data-normal-restablecer class="suite-boton-plata secundario">Usar 5 y 12 min</button>
+                    <button type="button" data-normal-cerrar class="suite-boton-plata secundario">Cerrar</button>
+                </div>
+            </form>`;
+            document.body.appendChild(modal);
+            this.aplicarTemaEnElemento(modal);
+            const form = modal.querySelector('form');
+            form.addEventListener('submit', e => {
+                e.preventDefault();
+                try {
+                    INTERACCION_NORMAL.guardar(Number(form.elements.aviso.value), Number(form.elements.sinRespuesta.value));
+                    MOTOR_CRONOMETROS_V2.tick();
+                    STATE.guardarEnDisco();
+                    COLA_VISUAL.solicitar('reloj', 'panel', 'pestanas');
+                    modal.remove();
+                    this.renderizarSelectorTema();
+                    this.mostrarToast('Tiempos de interacción guardados');
+                } catch (error) { modal.querySelector('#suite-interaccion-error').textContent = error.message || 'No se pudieron guardar los tiempos.'; }
+            });
+            modal.querySelector('[data-normal-restablecer]').onclick = () => {
+                form.elements.aviso.value = '5'; form.elements.sinRespuesta.value = '12';
+            };
+            modal.querySelector('[data-normal-cerrar]').onclick = () => modal.remove();
+            modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+            modal.addEventListener('keydown', e => { if (e.key === 'Escape') modal.remove(); });
+            form.elements.aviso.focus();
+        },
+
         renderizarSelectorTema() {
             const k = DOM.kb; if (!k || STATE.posKB.minimizado) return;
             const tarjetasPaleta = Object.entries(PALETAS_VISUALES).map(([id, paleta]) => {
@@ -3431,7 +3508,7 @@
             const diagnostico = RENDIMIENTO.resumen();
             const filaDiagnostico = (etiqueta, id, valor) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid color-mix(in srgb,var(--sd-borde) 55%,transparent);"><span style="font-size:8px;color:var(--sd-tenue);">${etiqueta}</span><b id="${id}" style="font-size:8px;color:var(--sd-texto);text-align:right;">${valor}</b></div>`;
             const medidor = `<div id="suite-medidor-rendimiento" class="suite-tarjeta-plata" style="margin-bottom:12px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;"><span class="suite-eyebrow-plata">Diagnóstico interno</span><b id="suite-rend-estado" style="font-size:9px;color:${diagnostico.estado.color};">${diagnostico.estado.texto}</b></div>${filaDiagnostico('Actualización promedio','suite-rend-promedio',`${diagnostico.promedio.toFixed(2)} ms`)}${filaDiagnostico('Actualización máxima','suite-rend-maximo',`${diagnostico.maximo.toFixed(2)} ms`)}${filaDiagnostico('Pintados evitados','suite-rend-cola',RENDIMIENTO.actualizacionesAgrupadas)}${filaDiagnostico('Reutilización del CRM','suite-rend-cache',`${diagnostico.porcentajeCache}%`)}${filaDiagnostico('Pausas recuperadas','suite-rend-pausas',diagnostico.pausas)}${filaDiagnostico('Ventanas recuperadas','suite-rend-ventanas',RENDIMIENTO.recuperacionesVentanas)}<div style="padding-top:7px;font-size:7px;color:var(--sd-tenue);line-height:1.45;">Último error: <span id="suite-rend-error">${UTILS.escaparHTML(RENDIMIENTO.ultimoError || 'Ninguno')}</span></div></div>`;
-            k.innerHTML = `<div style="height:100%;display:flex;flex-direction:column;box-sizing:border-box">${this.cabeceraHerramientas()}<div class="suite-scroll-plata" style="overflow-y:auto;min-height:0;flex:1;padding-right:3px;"><div class="suite-eyebrow-plata" style="margin:2px 0 9px;">Actualizaciones</div>${tarjetaActualizacion}<div class="suite-eyebrow-plata" style="margin:2px 0 9px;">Estilo visual</div><div class="suite-paletas-grid">${tarjetasPaleta}</div><div class="suite-eyebrow-plata" style="margin-bottom:9px;">Modo de iluminación</div>${tarjetaModo('oscuro','🌙','Modo oscuro','Versión nocturna de la paleta seleccionada.')}${tarjetaModo('claro','☀️','Modo claro','Versión luminosa de la misma identidad.')}<div class="suite-eyebrow-plata" style="margin:15px 0 9px;">Motor de cronómetros</div><div class="suite-tarjeta-plata" style="display:flex;align-items:center;gap:11px;margin-bottom:12px;"><span style="width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:var(--sd-acento-suave);color:var(--sd-acento);font-size:10px;font-weight:950;">V2</span><span><b style="display:block;font-size:10px;">Motor preciso activo</b><small style="display:block;font-size:8px;color:var(--sd-tenue);margin-top:3px;">Único motor de tiempos · basado en hora límite real.</small></span><span class="suite-punto-plata" style="margin-left:auto;"></span></div>${medidor}<div class="suite-eyebrow-plata" style="margin:8px 0 9px;">Paneles</div>${interruptorPanel}${botonRestablecer}<div style="font-size:8px;color:var(--sd-tenue);line-height:1.5;padding:4px;">La configuración se guarda para ${UTILS.escaparHTML(AUTH_MANAGER.usuario?.email || 'este agente')} en este navegador.</div></div></div>`;
+            k.innerHTML = `<div style="height:100%;display:flex;flex-direction:column;box-sizing:border-box">${this.cabeceraHerramientas()}<div class="suite-scroll-plata" style="overflow-y:auto;min-height:0;flex:1;padding-right:3px;"><div class="suite-eyebrow-plata" style="margin:2px 0 9px;">Actualizaciones</div>${tarjetaActualizacion}<div class="suite-eyebrow-plata" style="margin:2px 0 9px;">Estilo visual</div><div class="suite-paletas-grid">${tarjetasPaleta}</div><div class="suite-eyebrow-plata" style="margin-bottom:9px;">Modo de iluminación</div>${tarjetaModo('oscuro','🌙','Modo oscuro','Versión nocturna de la paleta seleccionada.')}${tarjetaModo('claro','☀️','Modo claro','Versión luminosa de la misma identidad.')}<div class="suite-eyebrow-plata" style="margin:15px 0 9px;">Cronómetros</div><button type="button" class="suite-tarjeta-plata" data-action="interaccion-normal" style="display:block;width:100%;text-align:left;margin-bottom:12px;color:var(--sd-texto);cursor:pointer;"><b style="font-size:12px;">◷ Interacción normal</b><span style="display:block;font-size:10px;color:var(--sd-tenue);margin-top:6px;">Primer aviso: ${INTERACCION_NORMAL.valores.avisoMin} min · Sin respuesta: ${INTERACCION_NORMAL.valores.sinRespuestaMin} min</span><span style="display:block;font-size:9px;color:var(--sd-acento);margin-top:5px;">Modificar tiempos →</span></button>${medidor}<div class="suite-eyebrow-plata" style="margin:8px 0 9px;">Paneles</div>${interruptorPanel}${botonRestablecer}<div style="font-size:8px;color:var(--sd-tenue);line-height:1.5;padding:4px;">La configuración se guarda para ${UTILS.escaparHTML(AUTH_MANAGER.usuario?.email || 'este agente')} en este navegador.</div></div></div>`;
             this.aplicarTemaEnElemento(k);
             RENDIMIENTO.actualizarVista();
         },
@@ -4509,13 +4586,9 @@
             if (STATE.clienteActualKey && STATE.clienteActualEnPantalla && chat) {
                 DOM.reloj.style.setProperty('display', 'block', 'important');
 
-                let colorTexto = '#34d399';
-                let colorBorde = 'rgba(16, 185, 129, 0.35)';
-
-                if (chat.tipo === 'cliente_respondio') { colorTexto = '#d8b4fe'; colorBorde = 'rgba(216, 180, 254, 0.45)'; }
-                else if (chat.tipo === 'bienvenida') { colorTexto = '#38bdf8'; colorBorde = 'rgba(56, 189, 248, 0.45)'; }
-                else if (chat.tiempo <= 20) { colorTexto = '#ef4444'; colorBorde = 'rgba(239, 68, 68, 0.45)'; }
-                else if (chat.tiempo <= 45) { colorTexto = '#f59e0b'; colorBorde = 'rgba(245, 158, 11, 0.45)'; }
+                const visual = INTERACCION_NORMAL.visualizar(chat);
+                const colorTexto = visual.color;
+                const colorBorde = visual.color;
 
                 DOM.reloj.style.setProperty('border-color', colorBorde, 'important');
                 DOM.reloj.title = `Cliente: ${STATE.clienteActualEnPantalla}`;
@@ -4531,22 +4604,20 @@
                 const estructura = esUltraChico ? 'compacta' : 'completa';
                 if (DOM.reloj.dataset.estructura !== estructura || !DOM.reloj.querySelector('.suite-reloj-tiempo')) {
                     DOM.reloj.dataset.estructura = estructura;
-                    if (esUltraChico) {
-                        DOM.reloj.innerHTML = `
-                            <div data-suite-drag-handle="true" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;box-sizing:border-box;padding:4px;">
-                                <span class="suite-reloj-tiempo" style="font-size:15px;font-weight:800;font-family:monospace;letter-spacing:-.03em;"></span>
-                            </div>`;
-                    } else {
-                        DOM.reloj.innerHTML = `
-                            <div data-suite-drag-handle="true" style="display:flex;flex-direction:column;justify-content:space-between;height:100%;width:100%;box-sizing:border-box;padding:10px;">
-                                <div style="display:flex;justify-content:space-between;align-items:center;">
-                                    <span style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;font-weight:bold;">Cliente Activo</span>
-                                    <span class="suite-reloj-tiempo" style="font-size:18px;font-weight:800;font-family:monospace;"></span>
-                                </div>
-                                <div class="suite-reloj-cliente" style="font-size:11px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:4px;font-weight:500;"></div>
-                            </div>`;
-                    }
+                    DOM.reloj.innerHTML = `
+                        <div data-suite-drag-handle="true" style="display:flex;flex-direction:column;justify-content:center;gap:5px;height:100%;padding:6px 9px;box-sizing:border-box;">
+                            <div class="suite-reloj-estado" style="font-size:${esUltraChico ? 9 : 11}px;font-weight:800;line-height:1.15;"></div>
+                            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:6px;white-space:nowrap;">
+                                <span class="suite-reloj-tiempo" style="font-size:${esUltraChico ? 15 : 18}px;font-weight:800;font-family:monospace;"></span>
+                                <span class="suite-reloj-aht" style="font-size:${esUltraChico ? 9 : 11}px;color:#94a3b8;font-family:monospace;"></span>
+                            </div>
+                            <div class="suite-reloj-cliente" style="font-size:10px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+                        </div>`;
                 }
+                const estado = DOM.reloj.querySelector('.suite-reloj-estado');
+                if (estado) { estado.textContent = visual.etiqueta; estado.style.color = visual.color; }
+                const aht = DOM.reloj.querySelector('.suite-reloj-aht');
+                if (aht) aht.textContent = `AHT ${UTILS.formatearTiempo(chat.aht)}`;
                 const tiempo = DOM.reloj.querySelector('.suite-reloj-tiempo');
                 if (tiempo) {
                     const valorTiempo = UTILS.formatearTiempo(chat.tiempo);
@@ -4555,7 +4626,7 @@
                 }
                 const cliente = DOM.reloj.querySelector('.suite-reloj-cliente');
                 if (cliente && cliente.textContent !== (STATE.clienteActualEnPantalla || '')) cliente.textContent = STATE.clienteActualEnPantalla || '';
-                if (chat.tiempo <= 0) DOM.reloj.classList.add('alerta-activa-plata');
+                if (visual.nivel === 2) DOM.reloj.classList.add('alerta-activa-plata');
                 else DOM.reloj.classList.remove('alerta-activa-plata');
             } else {
                 DOM.reloj.style.setProperty('display', 'none', 'important');
@@ -4596,17 +4667,15 @@
                     pestaña.appendChild(cronometro);
                 }
 
-                let estadoVisual = '';
-                if (chat.tipo === 'cliente_respondio') estadoVisual = 'respuesta';
-                else if (chat.tipo === 'bienvenida') estadoVisual = 'bienvenida';
-                else if (chat.tiempo <= 20 || chat.tipo === 'vencido' || chat.tiempo <= 0) estadoVisual = 'urgente';
-                else if (chat.tiempo <= 45) estadoVisual = 'aviso';
+                const visual = INTERACCION_NORMAL.visualizar(chat);
+                const estadoVisual = visual.clase;
 
                 const claseCronometro = `suite-cronometro-chat-integrado ${estadoVisual}`.trim();
                 if (cronometro.className !== claseCronometro) cronometro.className = claseCronometro;
                 const tiempoFormateado = UTILS.formatearTiempo(chat.tiempo);
-                if (cronometro.textContent !== tiempoFormateado) cronometro.textContent = tiempoFormateado;
-                const tituloCronometro = `${nombreLimpio}: ${tiempoFormateado}`;
+                const contenido = `${tiempoFormateado}\nAHT ${UTILS.formatearTiempo(chat.aht)}`;
+                if (cronometro.textContent !== contenido) cronometro.textContent = contenido;
+                const tituloCronometro = `${nombreLimpio} · ${visual.etiqueta}: ${tiempoFormateado} · AHT ${UTILS.formatearTiempo(chat.aht)}`;
                 if (cronometro.title !== tituloCronometro) cronometro.title = tituloCronometro;
                 if (cronometro.dataset.chatKey !== claveChat) cronometro.dataset.chatKey = claveChat;
             });
@@ -4692,16 +4761,13 @@
                     if (!chat) return;
                     const nombre = chat.nombreCliente || claveChat.replace(/^nombre:/, '');
 
-                    let colorTexto = '#34d399';
-                    if (chat.tipo === 'cliente_respondio') colorTexto = '#d8b4fe';
-                    else if (chat.tipo === 'bienvenida') colorTexto = '#38bdf8';
-                    else if (chat.tiempo <= 20 || chat.tipo === 'vencido' || chat.tiempo <= 0) colorTexto = '#ef4444';
-                    else if (chat.tiempo <= 45) colorTexto = '#f59e0b';
+                    const visual = INTERACCION_NORMAL.visualizar(chat);
+                    const colorTexto = visual.color;
 
                     const esActivo = (STATE.clienteActualKey === claveChat);
                     let borderColor = 'rgba(255, 255, 255, 0.08)';
                     if (esActivo) {
-                        borderColor = (chat.tipo === 'cliente_respondio') ? '#d8b4fe' : ((chat.tipo === 'bienvenida') ? '#38bdf8' : '#10b981');
+                        borderColor = INTERACCION_NORMAL.visualizar(chat).color;
                     }
 
                     let etiquetaVisual = nombre;
@@ -4725,8 +4791,8 @@
                                     <button data-action="borrar-cronometro" data-chat-key="${claveChatSegura}" style="pointer-events: auto; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; border-radius: 6px; width: 20px; height: 20px; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
                                 </div>
                             </div>
-                            <div class="detalle-cronometro" style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #94a3b8; margin-top: 2px; pointer-events: none;">
-                                <span class="modo-cronometro">Modo: ${chat.tipo === 'cliente_respondio' ? 'Espera Resp.' : (chat.tipo === 'bienvenida' ? 'Bienvenida' : chat.tipo)}</span>
+                            <div class="detalle-cronometro" style="display: flex; flex-wrap: wrap; gap: 3px 8px; justify-content: space-between; align-items: center; font-size: 10px; color: #94a3b8; margin-top: 2px; pointer-events: none;">
+                                <span class="modo-cronometro">${INTERACCION_NORMAL.visualizar(chat).etiqueta}</span>
                                 <span class="aht-cronometro">AHT: ${UTILS.formatearTiempo(chat.aht)}</span>
                             </div>
                         </div>`;
@@ -4756,11 +4822,8 @@
                             const tiempoFormateado = UTILS.formatearTiempo(chat.tiempo);
                             if (elTiempo.textContent !== tiempoFormateado) elTiempo.textContent = tiempoFormateado;
 
-                            let colorTexto = '#34d399';
-                            if (chat.tipo === 'cliente_respondio') colorTexto = '#d8b4fe';
-                            else if (chat.tipo === 'bienvenida') colorTexto = '#38bdf8';
-                            else if (chat.tiempo <= 20 || chat.tipo === 'vencido' || chat.tiempo <= 0) colorTexto = '#ef4444';
-                            else if (chat.tiempo <= 45) colorTexto = '#f59e0b';
+                            const visual = INTERACCION_NORMAL.visualizar(chat);
+                            const colorTexto = visual.color;
 
                             if (elTiempo.dataset.color !== colorTexto) {
                                 elTiempo.dataset.color = colorTexto;
@@ -4771,7 +4834,7 @@
                         const esActivo = (STATE.clienteActualKey === claveChat);
                         let borderColor = 'rgba(255, 255, 255, 0.08)';
                         if (esActivo) {
-                            borderColor = (chat.tipo === 'cliente_respondio') ? '#d8b4fe' : ((chat.tipo === 'bienvenida') ? '#38bdf8' : '#10b981');
+                            borderColor = INTERACCION_NORMAL.visualizar(chat).color;
                         }
                         if (tarjeta.dataset.colorBorde !== borderColor) {
                             tarjeta.dataset.colorBorde = borderColor;
@@ -4782,7 +4845,7 @@
                         if (elDetalle) {
                             const modo = tarjeta.querySelector('.modo-cronometro');
                             const aht = tarjeta.querySelector('.aht-cronometro');
-                            const textoModo = `Modo: ${chat.tipo === 'cliente_respondio' ? 'Espera Resp.' : (chat.tipo === 'bienvenida' ? 'Bienvenida' : chat.tipo)}`;
+                            const textoModo = `${INTERACCION_NORMAL.visualizar(chat).etiqueta}`;
                             const textoAHT = `AHT: ${UTILS.formatearTiempo(chat.aht)}`;
                             if (modo && modo.textContent !== textoModo) modo.textContent = textoModo;
                             if (aht && aht.textContent !== textoAHT) aht.textContent = textoAHT;
@@ -5111,6 +5174,8 @@
                     document.getElementById('suite-noticia-editor')?.remove();
                 } else if (e.target.closest('[data-action="actualizar-suite"]')) {
                     await ACTUALIZADOR_SUITE.abrirActualizacion();
+                } else if (e.target.closest('[data-action="interaccion-normal"]')) {
+                    this.abrirInteraccionNormal();
                 } else if (e.target.closest('[data-action="alternar-panel-cronometros"]')) {
                     this.alternarPanelCronometros();
                 } else if ((target = e.target.closest('[data-action="cambiar-estilo"]'))) {
@@ -5251,94 +5316,74 @@
     };
 
     // =========================================================================
-    // MOTOR DE CRONÓMETROS PRECISO · MOTOR ÚNICO
-    // Usa límites absolutos para que una pausa del navegador no agregue ni quite
-    // segundos. Conserva intactas las transiciones de bienvenida y respuestas.
+    // CRONÓMETROS ASCENDENTES: AHT total y tiempo de la fase actual.
+    // Las fechas persistidas evitan reinicios por cambio de chat o recarga.
     // =========================================================================
     const MOTOR_CRONOMETROS_V2 = {
         estadisticas: { ticks:0, pausasRecuperadas:0, ultimoTick:0 },
 
-        registrarFase(chat, duracionSegundos, fase) {
+        registrarFase(chat, _duracionLegada, fase) {
             if (!chat) return;
             const ahora = Date.now();
-            const duracion = Math.max(0, Math.floor(Number(duracionSegundos) || 0));
-            chat.motorV2 = {
-                fase: fase || chat.tipo || 'seguimiento',
-                limiteMs: ahora + duracion * 1000,
-                duracionInicial: duracion,
-                ultimoTiempoMostrado: duracion,
-                actualizadoEn: ahora
-            };
-            chat.tiempo = duracion;
+            chat.tipo = fase || chat.tipo || 'seguimiento';
+            chat.motorV2 = { version:3, fase:chat.tipo, inicioMs:ahora, nivelAvisado:0 };
+            chat.tiempo = 0;
+            chat.sonadoVencido = false;
+        },
+
+        recuperar(chat, ahora = Date.now()) {
+            const meta = chat.motorV2;
+            if (meta?.version === 3 && Number.isFinite(meta.inicioMs) && meta.fase === chat.tipo) return;
+            // Convierte una cuenta regresiva guardada sin reiniciar el AHT.
+            const fase = chat.tipo === 'vencido' ? 'seguimiento' : (chat.tipo || 'bienvenida');
+            const inicioLegado = meta?.fase !== 'vencido' && Number.isFinite(meta?.limiteMs) && Number.isFinite(meta?.duracionInicial)
+                ? meta.limiteMs - meta.duracionInicial * 1000
+                : Number.isFinite(meta?.actualizadoEn) ? meta.actualizadoEn
+                : fase === 'bienvenida' && Number.isFinite(chat.inicioAHT) ? chat.inicioAHT : ahora;
+            chat.tipo = fase;
+            chat.motorV2 = { version:3, fase, inicioMs:Math.min(ahora, inicioLegado), nivelAvisado:0 };
+            chat.tiempo = Math.max(0, Math.floor((ahora - chat.motorV2.inicioMs) / 1000));
+            // No reproduce alertas antiguas al migrar por primera vez.
+            chat.motorV2.nivelAvisado = INTERACCION_NORMAL.visualizar(chat).nivel;
         },
 
         adoptarEstadoActual() {
+            const ahora = Date.now();
             Object.values(STATE.memoriaChats || {}).forEach(chat => {
                 if (!chat || chat.finalizada) return;
-                const tiempoActual = Math.max(0, Math.floor(Number(chat.tiempo) || 0));
-                if (Number.isFinite(chat.motorV2?.limiteMs)) {
-                    chat.tiempo = Math.max(0, Math.ceil((chat.motorV2.limiteMs - Date.now()) / 1000));
-                } else this.registrarFase(chat, tiempoActual, chat.tipo);
+                this.recuperar(chat, ahora);
+                chat.tiempo = Math.max(0, Math.floor((ahora - chat.motorV2.inicioMs) / 1000));
+                chat.aht = Math.max(0, Math.floor((ahora - (Number.isFinite(chat.inicioAHT) ? chat.inicioAHT : ahora)) / 1000));
             });
-            this.estadisticas = { ticks:0, pausasRecuperadas:0, ultimoTick:Date.now() };
+            this.estadisticas = { ticks:0, pausasRecuperadas:0, ultimoTick:ahora };
             STATE.guardarEnDisco();
         },
 
         tick() {
             const ahora = Date.now();
-            const salto = this.estadisticas.ultimoTick > 0 ? ahora - this.estadisticas.ultimoTick : 0;
-            if (salto > 2200) this.estadisticas.pausasRecuperadas += 1;
+            if (this.estadisticas.ultimoTick > 0 && ahora - this.estadisticas.ultimoTick > 2200) this.estadisticas.pausasRecuperadas += 1;
             this.estadisticas.ultimoTick = ahora;
             this.estadisticas.ticks += 1;
-            let huboCambios = false;
-
+            let cambios = false;
             Object.values(STATE.memoriaChats || {}).forEach(chat => {
                 if (!chat || chat.finalizada) return;
-                if (!Number.isFinite(chat.inicioAHT)) {
-                    chat.inicioAHT = ahora;
-                    huboCambios = true;
-                }
-                const nuevoAHT = Math.max(0, Math.floor((ahora - chat.inicioAHT) / 1000));
-                if (chat.aht !== nuevoAHT) {
-                    chat.aht = nuevoAHT;
-                    huboCambios = true;
-                }
-
-                let meta = chat.motorV2;
-                const metaInvalida = !meta || !Number.isFinite(meta.limiteMs) || meta.fase !== chat.tipo;
-                const reinicioMismaFase = meta && Number(chat.tiempo) > Number(meta.ultimoTiempoMostrado) + 2;
-                if (metaInvalida || reinicioMismaFase) {
-                    this.registrarFase(chat, chat.tiempo, chat.tipo);
-                    meta = chat.motorV2;
-                    huboCambios = true;
-                }
-
-                if (!meta) return;
-                const maximo = Math.max(0, Number(meta.duracionInicial) || 0);
-                const restante = Math.min(maximo, Math.max(0, Math.ceil((meta.limiteMs - ahora) / 1000)));
-                if (chat.tiempo !== restante) {
-                    chat.tiempo = restante;
-                    huboCambios = true;
-                }
-                meta.ultimoTiempoMostrado = restante;
-
-                if (restante <= 0 && chat.tipo !== 'vencido') {
-                    chat.tipo = 'vencido';
-                    chat.tiempo = 0;
-                    meta.fase = 'vencido';
-                    meta.limiteMs = ahora;
-                    meta.duracionInicial = 0;
-                    if (!chat.sonadoVencido) {
-                        if (!STATE.modoLlamadasActivo) AUDIO_ENGINE.reproducir('urgente', { chat, evento:`vencido:${chat.interaccionId || chat.taskId || ''}:${meta.limiteMs}` });
-                        chat.sonadoVencido = true;
-                    }
-                    huboCambios = true;
-                } else if (restante > 0 && chat.sonadoVencido) {
-                    chat.sonadoVencido = false;
-                    huboCambios = true;
+                if (!Number.isFinite(chat.inicioAHT)) { chat.inicioAHT = ahora; cambios = true; }
+                this.recuperar(chat, ahora);
+                const aht = Math.max(0, Math.floor((ahora - chat.inicioAHT) / 1000));
+                const tiempo = Math.max(0, Math.floor((ahora - chat.motorV2.inicioMs) / 1000));
+                if (chat.aht !== aht || chat.tiempo !== tiempo) cambios = true;
+                chat.aht = aht;
+                chat.tiempo = tiempo;
+                const visual = INTERACCION_NORMAL.visualizar(chat);
+                if (chat.tipo === 'seguimiento' && visual.nivel > chat.motorV2.nivelAvisado) {
+                    chat.motorV2.nivelAvisado = visual.nivel;
+                    cambios = true;
+                    if (!STATE.modoLlamadasActivo) AUDIO_ENGINE.reproducir(visual.nivel === 2 ? 'urgente' : 'notificacion', {
+                        chat, evento:`seguimiento:${chat.interaccionId || chat.taskId || chat.nombreCliente}:${chat.motorV2.inicioMs}:${visual.nivel}`
+                    });
                 }
             });
-            return huboCambios;
+            return cambios;
         }
     };
 
@@ -5429,7 +5474,7 @@
         },
 
         esElementoSuite(elemento) {
-            return Boolean(elemento?.closest?.('#reloj-automatico-plata,#panel-cronometros-plata,#ventana-respuestas-plata,#ventana-kb-plata,#panel-bloc-notas-llamadas,#btn-toggle-modo-llamadas,#suite-llamadas-pendientes,#suite-paleta-comandos,#suite-noticia-editor,.suite-cronometro-chat-integrado'));
+            return Boolean(elemento?.closest?.('#reloj-automatico-plata,#panel-cronometros-plata,#ventana-respuestas-plata,#ventana-kb-plata,#panel-bloc-notas-llamadas,#btn-toggle-modo-llamadas,#suite-llamadas-pendientes,#suite-paleta-comandos,#suite-noticia-editor,#suite-interaccion-normal,.suite-cronometro-chat-integrado'));
         },
 
         detectarSenalesLlamada() {
@@ -5651,8 +5696,8 @@
 
         activarRespuestaCliente(chat, cantidadActual = 0, reproducirSonido = true) {
             if (!chat) return;
-            if (chat.tipo !== 'bienvenida') {
-                chat.tiempo = 120;
+            {
+                chat.tiempo = 0;
                 chat.tipo = 'cliente_respondio';
                 chat.sonadoVencido = false;
                 MOTOR_CRONOMETROS_V2.registrarFase(chat, 120, 'cliente_respondio');
@@ -5786,7 +5831,7 @@
                             const ahoraApertura = Date.now();
                             const emergenciaId = `em_${ahoraApertura}_${Math.random().toString(36).slice(2, 9)}`;
                             STATE.memoriaChats[claveChat] = {
-                                tiempo: 60,
+                                tiempo: 0,
                                 tipo: 'bienvenida',
                                 aht: 0,
                                 inicioAHT: ahoraApertura,
@@ -5928,7 +5973,7 @@
 
                             if (chat) {
                                 chat.idUltimoMensajeCliente = idMensajeActual;
-                                chat.tiempo = 120;
+                                chat.tiempo = 0;
                                 chat.tipo = 'cliente_respondio';
                                 chat.sonadoVencido = false;
                                 MOTOR_CRONOMETROS_V2.registrarFase(chat, 120, 'cliente_respondio');
@@ -6044,7 +6089,7 @@
             STATE.eliminadosVoluntariamente.delete(claveActual);
             STATE.memoriaChats[claveActual] = {
                 ...(chatExistente || {}),
-                tiempo: 180,
+                tiempo: 0,
                 tipo: 'seguimiento',
                 aht: chatExistente ? chatExistente.aht || 0 : 0,
                 inicioAHT: chatExistente?.inicioAHT || Date.now(),
@@ -6059,18 +6104,7 @@
             MOTOR_CRONOMETROS_V2.registrarFase(STATE.memoriaChats[claveActual], 180, 'seguimiento');
             STATE.guardarEnDisco();
             COLA_VISUAL.solicitar('reloj', 'panel', 'pestanas', 'respuestas');
-            setTimeout(() => {
-                const todosLosMensajes = CRM_CACHE.mensajes();
-                const mensajesCliente = todosLosMensajes.filter(msg => msg.querySelector('.bg-neutral-100') || msg.classList.contains('message-in'));
-                if (mensajesCliente.length > 0) {
-                    const ultimo = mensajesCliente[mensajesCliente.length - 1];
-                    const nodoTexto = ultimo.querySelector('.wrap-break-word');
-                    const txt = nodoTexto ? nodoTexto.innerText.trim() : ultimo.innerText.trim();
-                    const chat = STATE.memoriaChats[claveActual];
-                    STATE.idUltimoMensajeCliente = UTILS.obtenerIdMensaje(ultimo, txt, { claveChat:claveActual, indice:mensajesCliente.length - 1 });
-                    if (chat) chat.idUltimoMensajeCliente = STATE.idUltimoMensajeCliente;
-                }
-            }, 300);
+
         }
     };
 
@@ -6180,6 +6214,7 @@
                         !targetEl.closest('#panel-bloc-notas-llamadas') &&
                         !targetEl.closest('#suite-llamadas-pendientes') &&
                         !targetEl.closest('#suite-noticia-editor') &&
+                        !targetEl.closest('#suite-interaccion-normal') &&
                         !targetEl.closest('#btn-toggle-modo-llamadas') &&
                         !targetEl.closest('.suite-cronometro-chat-integrado')) {
                         contieneCambiosDelCRM = true;
@@ -6201,13 +6236,16 @@
             attributeFilter: ['class', 'aria-label', 'title', 'data-state', 'data-testid']
         });
 
-        let ultimoEnvioAgente = 0;
+        const ultimosEnviosAgente = new Map();
         const registrarEnvioAgente = campo => {
             if (!UTILS.esTextareaChat(campo) || !String(campo.value || '').trim()) return;
             const ahora = Date.now();
             // Enter puede generar también submit; ambos representan el mismo envío.
-            if (ahora - ultimoEnvioAgente < 700) return;
-            ultimoEnvioAgente = ahora;
+            const clave = STATE.clienteActualKey;
+            if (!clave) return;
+            if (ahora - (ultimosEnviosAgente.get(clave) || 0) < 700) return;
+            ultimosEnviosAgente.set(clave, ahora);
+            for (const [id, fecha] of ultimosEnviosAgente) if (ahora - fecha > 10000) ultimosEnviosAgente.delete(id);
             CRM_OBSERVER.activarSeguimientoTresMinutos(campo);
         };
 
@@ -6220,8 +6258,7 @@
         // Respaldo para versiones del CRM que procesan el envío como submit y
         // no conservan un data-testid estable en su botón.
         document.addEventListener('submit', (e) => {
-            const campo = e.target?.querySelector?.('textarea[data-testid="chat-message-input"]')
-                || UI_MANAGER.obtenerCampoChatEditable();
+            const campo = e.target?.querySelector?.('textarea[data-testid="chat-message-input"]');
             registrarEnvioAgente(campo);
         }, true);
 
@@ -6260,15 +6297,8 @@
                 ].filter(Boolean).join(' ').toLowerCase();
                 const campo = UI_MANAGER.obtenerCampoChatEditable();
                 const formulario = btn.closest('form');
-                const rectBoton = btn.getBoundingClientRect();
-                const rectCampo = campo?.getBoundingClientRect();
-                const estaJuntoAlCampo = Boolean(rectCampo
-                    && rectBoton.left >= rectCampo.left
-                    && rectBoton.right <= rectCampo.right + 35
-                    && Math.abs((rectBoton.top + rectBoton.bottom) / 2 - (rectCampo.top + rectCampo.bottom) / 2) <= 45);
                 const esBotonEnvio = /send-message-button|enviar|send/.test(firmaBoton)
-                    || (btn.getAttribute('type') === 'submit' && formulario && campo && formulario.contains(campo))
-                    || estaJuntoAlCampo;
+                    || (btn.getAttribute('type') === 'submit' && formulario && campo && formulario.contains(campo));
                 if (esBotonEnvio) registrarEnvioAgente(campo);
             }
         }, true);
