@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Sistema Dual Independiente: Cronómetros + Respuestas Premium + Módulo Llamadas (Optimizado + Marco Seguro)
 // @namespace    http://platatimer
-// @version      84.11.5
+// @version      84.11.9
 // @description  Cronómetros, respuestas, llamadas y sincronización. Edición sin asistencia de escritura.
 // @author       Aldair Valdivia
 // @match        *://crm.co-prime.diftech.org/*
@@ -20,7 +20,7 @@
 
     const ES_CRM = location.hostname === 'crm.co-prime.diftech.org';
     const MODO_VENTANA_AUTH = ES_CRM && new URLSearchParams(location.search).get('sistema_dual_auth') === '1';
-    const SUITE_VERSION = '84.11.5';
+    const SUITE_VERSION = '84.11.9';
     const SUITE_NOMBRE = 'Sistema Dual';
     const SUITE_AUTOR = 'Aldair Valdivia';
 
@@ -2824,6 +2824,20 @@
                 }
                 #btn-toggle-modo-llamadas:active { transform:translateY(0) scale(.985) !important; }
                 #reloj-automatico-plata { font-variant-numeric:tabular-nums; }
+                .suite-encabezado-con-reloj { flex-wrap:wrap !important; gap:8px !important; }
+                #reloj-automatico-plata .suite-reloj-cliente { display:none !important; }
+                #reloj-automatico-plata .suite-reloj-contenido { padding:8px 11px; }
+                #reloj-automatico-plata .suite-reloj-cabecera { display:flex;align-items:center;gap:7px;margin-bottom:4px;color:var(--suite-reloj-color); }
+                #reloj-automatico-plata .suite-reloj-punto { width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0; }
+                #reloj-automatico-plata .suite-reloj-estado { font-size:11px;font-weight:600;line-height:1.4; }
+                #reloj-automatico-plata .suite-reloj-metricas { display:flex;align-items:center;gap:12px;flex-wrap:wrap; }
+                #reloj-automatico-plata .suite-reloj-tiempo { font-size:23px;font-weight:600;letter-spacing:-.5px;line-height:1.15;font-variant-numeric:tabular-nums; }
+                #reloj-automatico-plata .suite-reloj-total { display:flex;flex-direction:column;gap:2px;border-left:1px solid #dce1ea;padding-left:12px;margin-left:auto; }
+                #reloj-automatico-plata .suite-reloj-etiqueta-aht { font-size:9px;font-weight:600;letter-spacing:.8px;color:#6b7280; }
+                #reloj-automatico-plata .suite-reloj-aht { font-size:14px;font-weight:500;line-height:1.2;color:#475569;font-variant-numeric:tabular-nums; }
+                #reloj-automatico-plata[data-estructura="compacta"] .suite-reloj-contenido { padding:8px 10px; }
+                #reloj-automatico-plata[data-estructura="compacta"] .suite-reloj-tiempo { font-size:21px; }
+
                 #ventana-respuestas-plata, #panel-cronometros-plata, #panel-bloc-notas-llamadas, #ventana-kb-plata {
                     overflow:hidden !important;
                 }
@@ -2972,21 +2986,63 @@
             DOM.reloj.style = CONFIG.ESTILO_GLASSMORPHISM;
             this.aplicarDimensionesReloj();
             document.body.appendChild(DOM.reloj);
-            this.hacerArrastrable(DOM.reloj, 'pos_reloj_plata_v2', 'reloj');
+            DOM.reloj.style.setProperty('display', 'none', 'important');
         },
 
         aplicarDimensionesReloj() {
             const r = DOM.reloj;
             if (!r) return;
-            r.style.setProperty('position', 'fixed', 'important');
-            r.style.setProperty('top', STATE.posReloj.top, 'important');
-            r.style.setProperty('left', STATE.posReloj.left, 'important');
-            r.style.setProperty('width', STATE.posReloj.width, 'important');
-            r.style.setProperty('height', STATE.posReloj.height, 'important');
-            r.style.setProperty('min-width', '110px', 'important');
-            r.style.setProperty('min-height', '40px', 'important');
-            r.style.setProperty('resize', 'both', 'important');
-            r.style.setProperty('overflow', 'hidden', 'important');
+            const estilos = {
+                position:'static', top:'auto', left:'auto', right:'auto', bottom:'auto',
+                width:'100%', 'max-width':'100%', height:'auto', 'min-width':'0',
+                'min-height':'0', resize:'none', overflow:'hidden', transform:'none',
+                'z-index':'auto', flex:'0 0 100%', order:'-1', margin:'0 0 6px', cursor:'default',
+                background:'linear-gradient(145deg, #fafbfe, #f1f3f8)', color:'#1d2433', border:'1px solid rgba(31,41,55,.065)',
+                'border-radius':'12px', 'backdrop-filter':'none', '-webkit-backdrop-filter':'none', animation:'none',
+                'box-sizing':'border-box', 'box-shadow':'inset 0 1px 0 rgba(255,255,255,.9)',
+                'font-family':'-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+            };
+            Object.entries(estilos).forEach(([propiedad, valor]) => r.style.setProperty(propiedad, valor, 'important'));
+        },
+
+        integrarRelojEnEncabezado() {
+            const reloj = DOM.reloj;
+            const nombre = UTILS.pointerNormalizer(STATE.clienteActualEnPantalla || '');
+            if (!reloj) return false;
+            if (!nombre) { reloj.style.setProperty('display', 'none', 'important'); return false; }
+            // Buscar el bloque de identidad, nunca mensajes ni pestañas laterales.
+            const controles = document.querySelectorAll('button, [role="button"], a');
+            let destino = null;
+            for (const control of controles) {
+                const texto = (control.textContent || '').replace(/\s+/g, ' ').trim();
+                if (!/^copiar\s+id\s+del\s+cliente$/i.test(texto)) continue;
+                if (control.closest('#ventana-kb-plata,#ventana-respuestas-plata,#panel-cronometros-plata')) continue;
+                if (!control.getClientRects().length) continue;
+                let bloque = control.parentElement;
+                for (let nivel = 0; bloque && nivel < 3; nivel++, bloque = bloque.parentElement) {
+                    const contenido = UTILS.pointerNormalizer(bloque.textContent || '');
+                    if (contenido.length > 350) break;
+                    if (!contenido.includes(nombre)) continue;
+                    destino = bloque;
+                    const fila = bloque.parentElement;
+                    if (fila && fila !== document.body && (fila.textContent || '').length < 350) {
+                        const estilo = getComputedStyle(fila);
+                        if (estilo.display === 'flex' && estilo.flexDirection !== 'column') destino = fila;
+                    }
+                    break;
+                }
+                if (destino) break;
+            }
+            if (!destino) {
+                reloj.style.setProperty('display', 'none', 'important');
+                return false;
+            }
+            if (reloj.parentElement !== destino || destino.firstElementChild !== reloj) {
+                document.querySelectorAll('.suite-encabezado-con-reloj').forEach(el => el.classList.remove('suite-encabezado-con-reloj'));
+                destino.classList.add('suite-encabezado-con-reloj');
+                destino.insertBefore(reloj, destino.firstChild);
+            }
+            return true;
         },
 
         crearPanelControl() {
@@ -3057,7 +3113,6 @@
             if (STATE.posKB.minimizado) this.posicionarAccesoSuperior(DOM.kb);
 
             const paneles = [
-                { elemento:DOM.reloj, estado:STATE.posReloj, clave:'pos_reloj_plata_v2', tipo:'reloj' },
                 { elemento:DOM.panel, estado:STATE.posPanel, clave:'pos_panel_plata_v2', tipo:'panel' },
                 { elemento:DOM.ventana, estado:STATE.posRespuestas, clave:'pos_respuestas_plata_v2', tipo:'respuestas' },
                 { elemento:DOM.blocNotas, estado:STATE.posBlocNotas, clave:'pos_bloc_notas_plata_v1', tipo:'blocNotas' },
@@ -3569,6 +3624,7 @@
         },
         aplicarTemaEnElemento(elemento) {
             if (!elemento) return;
+            if (elemento === DOM.reloj) { this.aplicarDimensionesReloj(); return; }
             elemento.style.setProperty('background', 'var(--sd-panel-bg)', 'important');
             elemento.style.setProperty('color', 'var(--sd-texto)', 'important');
             elemento.style.setProperty('border-color', 'var(--sd-borde)', 'important');
@@ -4573,6 +4629,7 @@
 
         actualizarRelojSuperior() {
             if (!DOM.reloj) return;
+            if (!this.integrarRelojEnEncabezado()) return;
             if (STATE.modoLlamadasActivo && !STATE.scriptsDuranteLlamada) {
                 DOM.reloj.style.setProperty('display', 'none', 'important');
                 return;
@@ -4587,11 +4644,11 @@
                 DOM.reloj.style.setProperty('display', 'block', 'important');
 
                 const visual = INTERACCION_NORMAL.visualizar(chat);
-                const colorTexto = visual.color;
-                const colorBorde = visual.color;
+                const colorTexto = ({'#38bdf8':'#0369a1','#34d399':'#047857','#d8b4fe':'#7e22ce','#f59e0b':'#a16207','#ef4444':'#dc2626'})[visual.color] || visual.color;
 
-                DOM.reloj.style.setProperty('border-color', colorBorde, 'important');
-                DOM.reloj.title = `Cliente: ${STATE.clienteActualEnPantalla}`;
+
+                DOM.reloj.style.setProperty('--suite-reloj-color', colorTexto);
+                DOM.reloj.removeAttribute('title');
 
                 if (STATE.ultimoClienteRenderizadoReloj !== STATE.clienteActualEnPantalla) {
                     STATE.ultimoClienteRenderizadoReloj = STATE.clienteActualEnPantalla;
@@ -4600,29 +4657,28 @@
                     DOM.reloj.classList.add('animar-entrada-premium');
                 }
 
-                const esUltraChico = DOM.reloj.offsetWidth < 190;
+                const esUltraChico = DOM.reloj.offsetWidth < 220;
                 const estructura = esUltraChico ? 'compacta' : 'completa';
                 if (DOM.reloj.dataset.estructura !== estructura || !DOM.reloj.querySelector('.suite-reloj-tiempo')) {
                     DOM.reloj.dataset.estructura = estructura;
                     DOM.reloj.innerHTML = `
-                        <div data-suite-drag-handle="true" style="display:flex;flex-direction:column;justify-content:center;gap:5px;height:100%;padding:6px 9px;box-sizing:border-box;">
-                            <div class="suite-reloj-estado" style="font-size:${esUltraChico ? 9 : 11}px;font-weight:800;line-height:1.15;"></div>
-                            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:6px;white-space:nowrap;">
-                                <span class="suite-reloj-tiempo" style="font-size:${esUltraChico ? 15 : 18}px;font-weight:800;font-family:monospace;"></span>
-                                <span class="suite-reloj-aht" style="font-size:${esUltraChico ? 9 : 11}px;color:#94a3b8;font-family:monospace;"></span>
+                        <div class="suite-reloj-contenido">
+                            <div class="suite-reloj-cabecera"><span class="suite-reloj-punto" aria-hidden="true"></span><span class="suite-reloj-estado"></span></div>
+                            <div class="suite-reloj-metricas">
+                                <span class="suite-reloj-tiempo"></span>
+                                <div class="suite-reloj-total"><span class="suite-reloj-etiqueta-aht">AHT</span><span class="suite-reloj-aht"></span></div>
                             </div>
-                            <div class="suite-reloj-cliente" style="font-size:10px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
                         </div>`;
                 }
                 const estado = DOM.reloj.querySelector('.suite-reloj-estado');
-                if (estado) { estado.textContent = visual.etiqueta; estado.style.color = visual.color; }
+                if (estado) { estado.textContent = visual.etiqueta; estado.style.color = colorTexto; }
                 const aht = DOM.reloj.querySelector('.suite-reloj-aht');
-                if (aht) aht.textContent = `AHT ${UTILS.formatearTiempo(chat.aht)}`;
+                if (aht) aht.textContent = UTILS.formatearTiempo(chat.aht);
                 const tiempo = DOM.reloj.querySelector('.suite-reloj-tiempo');
                 if (tiempo) {
                     const valorTiempo = UTILS.formatearTiempo(chat.tiempo);
                     if (tiempo.textContent !== valorTiempo) tiempo.textContent = valorTiempo;
-                    tiempo.style.color = colorTexto;
+                    tiempo.style.color = visual.nivel === 2 ? colorTexto : '#1d2433';
                 }
                 const cliente = DOM.reloj.querySelector('.suite-reloj-cliente');
                 if (cliente && cliente.textContent !== (STATE.clienteActualEnPantalla || '')) cliente.textContent = STATE.clienteActualEnPantalla || '';
