@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Sistema Dual Independiente: Cronómetros + Respuestas Premium + Módulo Llamadas (Optimizado + Marco Seguro)
 // @namespace    http://platatimer
-// @version      84.11.4
+// @version      84.11.5
 // @description  Cronómetros, respuestas, llamadas y sincronización. Edición sin asistencia de escritura.
 // @author       Aldair Valdivia
 // @match        *://crm.co-prime.diftech.org/*
@@ -20,7 +20,7 @@
 
     const ES_CRM = location.hostname === 'crm.co-prime.diftech.org';
     const MODO_VENTANA_AUTH = ES_CRM && new URLSearchParams(location.search).get('sistema_dual_auth') === '1';
-    const SUITE_VERSION = '84.11.4';
+    const SUITE_VERSION = '84.11.5';
     const SUITE_NOMBRE = 'Sistema Dual';
     const SUITE_AUTOR = 'Aldair Valdivia';
 
@@ -2753,7 +2753,7 @@
                 }
                 [data-testid*="task-tab-"].suite-chat-con-cronometro {
                     position: relative !important;
-                    padding-right: 91px !important;
+                    padding-right: 70px !important;
                     box-sizing: border-box !important;
                 }
                 .suite-cronometro-chat-integrado {
@@ -2762,8 +2762,8 @@
                     top: 50% !important;
                     transform: translateY(-50%) !important;
                     min-width: 45px !important;
-                    height: 36px !important;
-                    padding: 4px 6px !important;
+                    height: 24px !important;
+                    padding: 0 7px !important;
                     display: inline-flex !important;
                     align-items: center !important;
                     justify-content: center !important;
@@ -2772,10 +2772,10 @@
                     border: 1px solid rgba(16, 185, 129, 0.20) !important;
                     background: rgba(15, 23, 42, 0.07) !important;
                     color: #059669 !important;
-                    font: 800 10px/1.35 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+                    font: 800 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
                     letter-spacing: -0.03em !important;
                     pointer-events: none !important;
-                    white-space: pre !important;
+                    white-space: nowrap !important;
                     text-align: center !important;
                     z-index: 2 !important;
                     transition: color .2s ease, background-color .2s ease, border-color .2s ease !important;
@@ -4673,9 +4673,9 @@
                 const claseCronometro = `suite-cronometro-chat-integrado ${estadoVisual}`.trim();
                 if (cronometro.className !== claseCronometro) cronometro.className = claseCronometro;
                 const tiempoFormateado = UTILS.formatearTiempo(chat.tiempo);
-                const contenido = `${tiempoFormateado}\nAHT ${UTILS.formatearTiempo(chat.aht)}`;
+                const contenido = tiempoFormateado;
                 if (cronometro.textContent !== contenido) cronometro.textContent = contenido;
-                const tituloCronometro = `${nombreLimpio} · ${visual.etiqueta}: ${tiempoFormateado} · AHT ${UTILS.formatearTiempo(chat.aht)}`;
+                const tituloCronometro = `${nombreLimpio} · ${visual.etiqueta}: ${tiempoFormateado}`;
                 if (cronometro.title !== tituloCronometro) cronometro.title = tituloCronometro;
                 if (cronometro.dataset.chatKey !== claveChat) cronometro.dataset.chatKey = claveChat;
             });
